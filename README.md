@@ -452,6 +452,7 @@ CSharpClientCodegen.java
 ClojureClientCodegen.java
 CsharpDotNet2ClientCodegen.java
 DartClientCodegen.java
+ErlangClientCodegen.java
 FlashClientCodegen.java
 FlaskConnexionCodegen.java
 GoClientCodegen.java

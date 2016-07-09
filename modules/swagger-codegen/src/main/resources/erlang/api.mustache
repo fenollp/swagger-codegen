@@ -1,0 +1,235 @@
+{{>partial_header}}
+-module({{packageName}}).
+
+{{#operations}}
+{{#operation}}
+-export([{{nickname}}/{{#allParams.length}}]).
+{{/operation}}{{/operations}}
+
+{{#operations}}
+{{#operation}}
+
+%% @doc
+%% {{summary}}
+%% {{#notes}}{{notes}}{{/notes}}
+%%
+{{#allParams}}%% @param {{paramName}} {{description}}
+{{/allParams}}%% @return {{#returnType}}{{^isListContainer}}*{{/isListContainer}}{{{returnType}}}{{/returnType}}{{^returnType}}void{{/returnType}}
+%% @end
+-spec {{nickname}} ({{#allParams}}{{paramName}}::{{dataType}}{{#hasMore}}, {{/hasMore}}{{/allParams}}) -> {ok, {{returnType}}} | {error, _}.
+%%func (a {{classname}}) {{nickname}}({{#allParams}}{{paramName}} {{{dataType}}}{{#hasMore}}, {{/hasMore}}{{/allParams}}) ({{#returnType}}{{^isListContainer}}*{{/isListContainer}}{{{returnType}}}, {{/returnType}}*APIResponse, error) {
+{{nickname}} ({{#allParams}}{{paramName}}{{#hasMore}}, {{/hasMore}}{{/allParams}}) ->
+    Method = {{httpMethod}},
+    %% create path and map variables
+%%	path := a.Configuration.BasePath + "{{path}}"{{#pathParams}}
+    Path0 = conf:'BasePath'() ++ "{{path}}",
+    Path = lists:foldl(fun (Param, Acc) ->
+                               re:replace(Acc, "{"+"{{baseName}}"+"}", {{paramName}}, [global, {return,list}])
+                       end
+                      ,Path0
+                      ,[{{#pathParams}}{{paramName}}{{#hasMore}}, {{/hasMore}}{{/pathParams}}]
+                      ),
+%%	path = strings.Replace(path, , fmt.Sprintf("%v", {{paramName}}), -1){{/pathParams}}
+    %% verify required parameters are set
+    case [ParamName
+          || {ParamName,undefined} <- [{{#allParams}}{{#required}}{"{{paramName}}",{{paramName}}}{{#hasMore}}, {{/hasMore}}{{/required}}{{/allParams}}]
+         ] of
+        Missing when Missing =/= [] ->
+            {error, {missing_required, Missing}};
+	%% if &{{paramName}} == nil {
+	%% 	return {{#returnType}}{{#isListContainer}}*{{/isListContainer}}new({{{returnType}}}), {{/returnType}}nil, errors.New("Missing required parameter '{{paramName}}' when calling {{classname}}->{{operationId}}")
+	%% }{{/required}}{{/allParams}}
+        _ ->
+
+	HeaderParams0 = [],
+	QueryParams0 = [],
+
+{{#authMethods}}
+	%% authentication ({{name}}) required
+{{/authMethods}}
+	%% set key with prefix in header
+    HeaderParams1 = [ []
+{{#authMethods}}
+{{#isApiKey}}
+{{#isKeyInHeader}}
+                    ++ [{"{{keyParamName}}", conf:'GetAPIKeyWithPrefix'("{{keyParamName}}")}]
+%%	headerParams["{{keyParamName}}"] = a.Configuration.GetAPIKeyWithPrefix("{{keyParamName}}")
+{{/isKeyInHeader}}
+{{/isApiKey}}
+{{/authMethods}}
+                    ++ HeaderParams0
+                    ],
+
+	%% set key with prefix in querystring
+    QueryParams1 = []
+{{#authMethods}}
+{{#isApiKey}}
+{{#isKeyInQuery}}
+{{#hasKeyParamName}}
+        ++ [{"{{keyParamName}}", conf:'GetAPIKeyWithPrefix'("{{keyParamName}}")}]
+	%% queryParams["{{keyParamName}}"] =  a.Configuration.GetAPIKeyWithPrefix("{{keyParamName}}")
+{{/hasKeyParamName}}
+{{/isKeyInQuery}}
+{{/isApiKey}}
+{{/authMethods}}
+        ++ QueryParams0,
+
+    HeaderParams2 = [
+{{#authMethods}}
+{{#isBasic}}
+	%% http basic authentication required
+        {"Authorization", "Basic " ++ base64:encode_to_string(<<(conf:'Username'())/binary, ":", (conf:'Password'())/binary>>)} |
+	%% if a.Configuration.Username != "" || a.Configuration.Password != ""{
+	%% 	headerParams["Authorization"] =  "Basic " + a.Configuration.GetBasicAuthEncodedString()
+	%% }
+{{/isBasic}}
+{{/authMethods}}
+        HeaderParams1],
+
+    HeaderParams3 = [
+{{#authMethods}}
+{{#isOAuth}}
+	%% oauth required
+        {"Authorization", "Bearer " ++ conf:'AccessToken'()} |
+	%% if a.Configuration.AccessToken != ""{
+	%% 	headerParams["Authorization"] =  "Bearer " + a.Configuration.AccessToken
+	%% }
+{{/isOAuth}}
+{{/authMethods}}
+        HeaderParams2],
+
+	%% add default headers if any
+    HeaderParams4 = [conf:'DefaultHeaders'() | HeaderParams3],
+	%% for key := range a.Configuration.DefaultHeader {
+	%% 	headerParams[key] = a.Configuration.DefaultHeader[key]
+	%% }
+
+    QueryParams2 = []
+{{#hasQueryParams}}
+{{#queryParams}}
+        ++ [{"{{paramName}}", conf:'APIClient.ParameterToString'({{paramName}})}]
+%% {{#isListContainer}}
+%% 	var collectionFormat = "{{#collectionFormat}}{{collectionFormat}}{{/collectionFormat}}"
+%% 	if collectionFormat == "multi" {
+%% 		for _, value := range {{paramName}} {
+%% 			queryParams.Add("{{paramName}}", value)
+%% 		}
+%% 	} else {
+%% 		queryParams.Add("{{paramName}}", a.Configuration.APIClient.ParameterToString({{paramName}}, collectionFormat))
+%% 	}
+%% {{/isListContainer}}
+%% {{^isListContainer}}
+%% 		queryParams.Add("{{paramName}}", a.Configuration.APIClient.ParameterToString({{paramName}}, ""))
+%% {{/isListContainer}}
+{{/queryParams}}
+{{/hasQueryParams}}
+        ++ QueryParams1,
+    QueryParams = QueryParams2,
+
+    QS = encode_params(QueryParams),
+    URI = case {QS, lists:member($?, Path)} of
+              {"", _} -> Path;
+              {_, true} -> lists:flatten([Path, $&, QS]);
+              {_, false} -> lists:flatten([Path, $?, QS])
+          end,
+
+    %% to determine the Content-Type header
+    CTs = [ {{#consumes}}"{{mediaType}}"{{#hasMore}}, {{/hasMore}}{{/consumes}} ],
+	%% localVarHttpContentTypes := []string{ {{#consumes}}"{{{mediaType}}}", {{/consumes}} }
+    %% set Content-Type header
+    CT = hd(CTs),
+	%% localVarHttpContentType := a.Configuration.APIClient.SelectHeaderContentType(localVarHttpContentTypes)
+	%% if localVarHttpContentType != "" {
+	%% 	headerParams["Content-Type"] = localVarHttpContentType
+	%% }
+
+    %% to determine the Accept header
+    Accepts = [ {{#produces}}"{{mediaType}}"{{#hasMore}}, {{/hasMore}}{{/produces}} ],
+	%% localVarHttpHeaderAccepts := []string{ {{#produces}}"{{{mediaType}}}", {{/produces}} }
+    %% set Accept header
+    HeaderParams5 = [hd(Accepts) | HeaderParams4],
+	%% localVarHttpHeaderAccept := a.Configuration.APIClient.SelectHeaderAccept(localVarHttpHeaderAccepts)
+	%% if localVarHttpHeaderAccept != "" {
+	%% 	headerParams["Accept"] = localVarHttpHeaderAccept
+	%% }
+
+    HeaderParams6 = []
+{{#hasHeaderParams}}
+{{#headerParams}}
+	%% header params "{{baseName}}"
+        ++ [{"{{baseName}}", {{paramName}}}]
+	%% headerParams["{{baseName}}"] = {{paramName}}
+{{/headerParams}}
+{{/hasHeaderParams}}
+        ++ HeaderParams5,
+    Headers = HeaderParams6,
+
+{{#hasFormParams}}
+    FormParams = []
+{{#formParams}}
+{{#isFile}}
+        ++ ["{{paramName}}"]
+{{/isFile}}
+{{^isFile}}
+        ++ [{"{{paramName}}", {{paramName}}}]
+	%% formParams["{{paramName}}"] = {{paramName}}
+{{/isFile}}
+{{/formParams}}
+        ++ [],
+ Request =
+    case lists:any(fun is_tuple/1, FormParams) of
+        true ->
+            QD = encode_params(FormParams),
+            {URI, Headers, "application/x-www-form-urlencoded", QD};
+        false ->
+            FileName = hd([FP || FP <- FormParams, not is_tuple(FP)]),
+            {ok, Body} = file:read_file(FileName),
+            NewHeaders = {"Content-Disposition", "filename=\""++ filename:basename(FileName) ++"\""},
+            Options = [{body_format, binary}],
+            {URI, NewHeaders, CT, Body, [], Options},
+	%% fbs, _ := ioutil.ReadAll(file)
+	%% fileBytes = fbs
+	%% fileName = file.Name()
+    end,
+{{/hasFormParams}}
+{{^hasFormParams}}
+{{#hasBodyParam}}
+    %% body params
+{{#bodyParams}}
+    Body = {{paramName}},
+    Request = {URI, Headers, CT, Body},
+	%% postBody = &{{paramName}}
+{{/bodyParams}}
+{{/hasBodyParam}}
+{{^hasBodyParams}}
+    Request = {URI, Headers},
+{{/hasBodyParams}}
+{{/hasFormParams}}
+
+    httpc:request(Method, Request, [], [])
+end.
+%% {{#returnType}}
+%% 	var successPayload = new({{returnType}})
+%% {{/returnType}}
+%% 	httpResponse, err := a.Configuration.APIClient.CallAPI(path, httpMethod, postBody, headerParams, queryParams, formParams, fileName, fileBytes)
+%% 	if err != nil {
+%% 		return {{#returnType}}{{#isListContainer}}*{{/isListContainer}}successPayload, {{/returnType}}NewAPIResponse(httpResponse.RawResponse), err
+%% 	}
+%% {{#returnType}}
+%% 	err = json.Unmarshal(httpResponse.Body(), &successPayload)
+%% {{/returnType}}
+%% 	return {{#returnType}}{{#isListContainer}}*{{/isListContainer}}successPayload, {{/returnType}}NewAPIResponse(httpResponse.RawResponse), err
+%% }
+
+{{/operation}}
+{{/operations}}
+
+-spec encode_params(nonempty_list({Key, Value})) -> Encoded when
+      Key :: nonempty_string(),
+      Value :: nonempty_string(),
+      Encoded :: nonempty_string().
+encode_params(Params) ->
+    Strings = [edoc_lib:escape_uri(K) ++ "=" ++ edoc_lib:escape_uri(V)
+               || {K,V} <- Params
+              ],
+    string:join(Strings, "&").
