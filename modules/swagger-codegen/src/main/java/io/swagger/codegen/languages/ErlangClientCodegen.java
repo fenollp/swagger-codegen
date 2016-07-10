@@ -68,10 +68,36 @@ public class ErlangClientCodegen extends DefaultCodegen implements CodegenConfig
         //             )
         //         );
 
-        // languageSpecificPrimitives = new HashSet<String>(
-        //     Arrays.asList(
-        //         )
-        //     );
+        languageSpecificPrimitives = new HashSet<String>(
+            Arrays.asList(
+                "term()",
+                "binary()",
+                "bitstring()",
+                "boolean()",
+                "byte()",
+                "char()",
+                "nil()",
+                "number()",
+                "list()",
+                "maybe_improper_list()",
+                "nonempty_list()",
+                "string()",
+                "nonempty_string()",
+                "iodata()",
+                "iolist()",
+                "function()",
+                "module()",
+                "mfa()",
+                "arity()",
+                "identifier()",
+                "node()",
+                "timeout()",
+                "no_return()",
+                "non_neg_integer()",
+                "pos_integer()",
+                "neg_integer()"
+                )
+            );
 
         instantiationTypes.clear();
         /*instantiationTypes.put("array", "GoArray");
@@ -85,11 +111,11 @@ public class ErlangClientCodegen extends DefaultCodegen implements CodegenConfig
         typeMapping.put("double", "float()");
         typeMapping.put("boolean", "boolean()");
         typeMapping.put("string", "string()");
-        typeMapping.put("date", "calendar:datetime()");
-        typeMapping.put("DateTime", "calendar:datetime()");
+        typeMapping.put("date", "string()");
+        typeMapping.put("DateTime", "string()");
         typeMapping.put("password", "string()");
-        typeMapping.put("File", "file:name()");
-        typeMapping.put("file", "file:name()");
+        typeMapping.put("File", "iodata()");
+        typeMapping.put("file", "iodata()");
         typeMapping.put("binary", "binary()");
         typeMapping.put("ByteArray", "string()");
 
@@ -157,9 +183,9 @@ public class ErlangClientCodegen extends DefaultCodegen implements CodegenConfig
         // replace - with _ e.g. created-at => created_at
         name = name.replaceAll("-", "_");
 
-        // camelize (lower first character) the variable name
-        // pet_id => petId
-        name = camelize(name, true);
+        // camelize
+        // pet_id => PetId
+        name = camelize(name, false);
 
         // for reserved word or word starting with number, append _
         if(isReservedWord(name) || name.matches("^\\d.*"))
@@ -178,7 +204,7 @@ public class ErlangClientCodegen extends DefaultCodegen implements CodegenConfig
     @Override
     public String toModelName(String name) {
         // camelize the model name
-        // phone_number => phoneNumber
+        // phone_number => PhoneNumber
         return camelize(toModelFilename(name), false);
     }
 
@@ -236,33 +262,43 @@ public class ErlangClientCodegen extends DefaultCodegen implements CodegenConfig
 
     @Override
     public String getTypeDeclaration(Property p) {
-        if(p instanceof ArrayProperty) {
+        if (p instanceof ArrayProperty) {
             ArrayProperty ap = (ArrayProperty) p;
             Property inner = ap.getItems();
-            return "[" +getTypeDeclaration(inner)+ "]";
+            return "[" + getTypeDeclaration(inner) + "]";
         }
-        else if (p instanceof MapProperty) {
+        if (p instanceof MapProperty) {
             MapProperty mp = (MapProperty) p;
             Property inner = mp.getAdditionalProperties();
-
-            //getSwaggerType(p) (= "map", …)
             return "#{string() => " + getTypeDeclaration(inner) + "}";
         }
-        return super.getTypeDeclaration(p);
+        //return super.getTypeDeclaration(p);
+
+        // Not using the supertype invocation, because we want
+        // to lower_case the type.
+        String swaggerType = getSwaggerType(p);
+        if (typeMapping.containsKey(swaggerType)) {
+            return typeMapping.get(swaggerType);
+        }
+        // if (languageSpecificPrimitives.contains(swaggerType)) {
+        //     return swaggerType;
+        // }
+
+        String datatype = camelize(super.getTypeDeclaration(p), true);
+        if (datatype.matches("^[a-zA-Z0-9_]+$"))
+            return datatype + "()";
+        return datatype;
     }
 
     // @Override
     // public String getSwaggerType(Property p) {
     //     String swaggerType = super.getSwaggerType(p);
-    //     String type = null;
-    //     if(typeMapping.containsKey(swaggerType)) {
-    //         type = typeMapping.get(swaggerType);
-    //         if(languageSpecificPrimitives.contains(type))
-    //             return (type);
+    //     if (typeMapping.containsKey(swaggerType)) {
+    //         String type = typeMapping.get(swaggerType);
+    //         if (languageSpecificPrimitives.contains(type))
+    //             return type;
     //     }
-    //     else
-    //         type = swaggerType;
-    //     return type;
+    //     return swaggerType;
     // }
 
     @Override
@@ -290,11 +326,12 @@ public class ErlangClientCodegen extends DefaultCodegen implements CodegenConfig
         return objs;
     }
 
-    // @Override
-    // protected boolean needToImport(String type) {
-    //     return !defaultIncludes.contains(type)
-    //         && !languageSpecificPrimitives.contains(type);
-    // }
+    @Override
+    protected boolean needToImport(String type) {
+        return !languageSpecificPrimitives.contains(type);
+        // return !defaultIncludes.contains(type)
+        //     && !languageSpecificPrimitives.contains(type);
+    }
 
     public void setPackageName(String packageName) {
         this.packageName = packageName;
