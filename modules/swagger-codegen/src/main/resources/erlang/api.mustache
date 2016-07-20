@@ -4,7 +4,8 @@
 {{#operations}}
 {{#operation}}
 -export([{{nickname}}/{{allParams.length}}]).
-{{/operation}}{{/operations}}
+{{/operation}}
+{{/operations}}
 
 {{#operations}}
 {{#operation}}
@@ -14,12 +15,9 @@
 %% {{#notes}}{{notes}}{{/notes}}
 %%
 {{#allParams}}%% @param {{paramName}} {{description}}
-{{/allParams}}%% @return {{#returnType}}{{^isListContainer}}*{{/isListContainer}}{{{returnType}}}{{/returnType}}{{^returnType}}void{{/returnType}}
-%% @end
--spec {{nickname}} ({{#allParams}}{{paramName}}::{{dataType}}{{#hasMore}}, {{/hasMore}}{{/allParams}}) -> {ok, {{returnType}}} | {error, _}.
-%%func (a {{classname}}) {{nickname}}({{#allParams}}{{paramName}} {{{dataType}}}{{#hasMore}}, {{/hasMore}}{{/allParams}}) ({{#returnType}}{{^isListContainer}}*{{/isListContainer}}{{{returnType}}}, {{/returnType}}*APIResponse, error) {
+{{/allParams}}%% @end
+-spec {{nickname}} ({{#allParams}}{{paramName}}::{{dataType}}{{#hasMore}}, {{/hasMore}}{{/allParams}}) -> {ok, _} | {error, _}.
 {{nickname}} ({{#allParams}}{{paramName}}{{#hasMore}}, {{/hasMore}}{{/allParams}}) ->
-    Method = {{httpMethod}},
     %% create path and map variables
 %%	path := a.Configuration.BasePath + "{{path}}"{{#pathParams}}
     Path0 = conf:'BasePath'() ++ "{{path}}",
@@ -38,7 +36,7 @@
             {error, {missing_required, Missing}};
 	%% if &{{paramName}} == nil {
 	%% 	return {{#returnType}}{{#isListContainer}}*{{/isListContainer}}new({{{returnType}}}), {{/returnType}}nil, errors.New("Missing required parameter '{{paramName}}' when calling {{classname}}->{{operationId}}")
-	%% }{{/required}}{{/allParams}}
+	%% }
         _ ->
 
 	HeaderParams0 = [],
@@ -183,10 +181,10 @@
             {URI, Headers, "application/x-www-form-urlencoded", QD};
         false ->
             FileName = hd([FP || FP <- FormParams, not is_tuple(FP)]),
-            {ok, Body} = file:read_file(FileName),
+            {ok, RBody} = file:read_file(FileName),
             NewHeaders = {"Content-Disposition", "filename=\""++ filename:basename(FileName) ++"\""},
             Options = [{body_format, binary}],
-            {URI, NewHeaders, CT, Body, [], Options},
+            {URI, NewHeaders, CT, RBody, [], Options},
 	%% fbs, _ := ioutil.ReadAll(file)
 	%% fileBytes = fbs
 	%% fileName = file.Name()
@@ -196,8 +194,8 @@
 {{#hasBodyParam}}
     %% body params
 {{#bodyParams}}
-    Body = {{paramName}},
-    Request = {URI, Headers, CT, Body},
+    RBody = {{paramName}},
+    Request = {URI, Headers, CT, RBody},
 	%% postBody = &{{paramName}}
 {{/bodyParams}}
 {{/hasBodyParam}}
@@ -206,7 +204,7 @@
 {{/hasBodyParams}}
 {{/hasFormParams}}
 
-    httpc:request(Method, Request, [], [])
+    httpc:request({{httpMethod}}, Request, [], [])
 end.
 %% {{#returnType}}
 %% 	var successPayload = new({{returnType}})
